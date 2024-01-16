@@ -1,14 +1,16 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 using RPG.Combat;
 using RPG.Core;
+using RPG.Saving;
 using UnityEngine;
 using UnityEngine.AI;
 
 namespace RPG.Movement
 {
-    public class Mover : MonoBehaviour, IAction
+    public class Mover : MonoBehaviour, IAction, ISaveable
     {
         [SerializeField] float maxSpeed = 5.66f;
         NavMeshAgent agent;
@@ -54,6 +56,40 @@ namespace RPG.Movement
         public void Cancel()
         {
             agent.isStopped = true;
+        }
+
+        // [System.Serializable]
+        // struct MoverSaveDate
+        // {
+        //     public SerializableVector3 position;
+        //     public SerializableVector3 rotation;
+        // }
+
+        public JToken CaptureAsJToken()
+        {
+            return transform.position.ToToken();
+        }
+
+        // public JToken CaptureAsJToken()
+        // {
+        //     MoverSaveDate data = new MoverSaveDate
+        //     {
+        //         position = new SerializableVector3(transform.position),
+        //         rotation = new SerializableVector3(transform.eulerAngles)
+        //     };
+
+        //     return JToken.FromObject(data);
+        // }
+
+        public void RestoreFromJToken(JToken state)
+        {
+            //MoverSaveDate data = (MoverSaveDate)state;
+            GetComponent<NavMeshAgent>().enabled = false;
+            //transform.position = data.position.ToVector();
+            //transform.eulerAngles = data.rotation.ToVector();
+            transform.position = state.ToObject<Vector3>();
+            GetComponent<NavMeshAgent>().enabled = true;
+            GetComponent<ActionScheduler>().CancelCurrentAction();
         }
     }
 }

@@ -10,7 +10,7 @@ namespace RPG.SceneManagement
         [SerializeField] float fadeInTime = 1f;
         CanvasGroup canvasGroup;
 
-        void Start()
+        void Awake()
         {
             canvasGroup = GetComponent<CanvasGroup>();
         }
@@ -22,6 +22,11 @@ namespace RPG.SceneManagement
                 canvasGroup.alpha += Time.deltaTime / fadeOutTime;
                 yield return null;
             }
+        }
+
+        public void FadeOutImmediate()
+        {
+            canvasGroup.alpha = 1;
         }
 
         public IEnumerator FadeIn()
