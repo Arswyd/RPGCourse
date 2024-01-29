@@ -1,4 +1,5 @@
 using Newtonsoft.Json.Linq;
+using RPG.Attributes;
 using RPG.Core;
 using RPG.Saving;
 using UnityEngine;
@@ -9,6 +10,7 @@ namespace RPG.Movement
     public class Mover : MonoBehaviour, IAction, ISaveable
     {
         [SerializeField] float maxSpeed = 5.66f;
+        [SerializeField] float maxNavPathLenght = 40f;
         NavMeshAgent agent;
         Animator animator;
         ActionScheduler actionScheduler;
@@ -47,6 +49,29 @@ namespace RPG.Movement
             agent.speed = maxSpeed * Mathf.Clamp01(speedFraction);
             agent.destination = destination;
             agent.isStopped = false;
+        }
+
+        public bool CanMoveTo(Vector3 destination)
+        {
+            NavMeshPath path = new NavMeshPath();
+            bool hasPath = NavMesh.CalculatePath(transform.position, destination, NavMesh.AllAreas, path);
+            if(!hasPath) { return false; }
+            if(path.status != NavMeshPathStatus.PathComplete) { return false; }
+            if(GetPathLenght(path) > maxNavPathLenght) { return false; }
+
+            return true;
+        }
+
+        float GetPathLenght(NavMeshPath path)
+        {
+            float total = 0;
+            if(path.corners.Length < 2) {return total;}
+            
+            for (int i = 0; i < path.corners.Length - 1; i++)
+            {
+                total += Vector3.Distance(path.corners[i], path.corners[i+1]);
+            }
+            return total;
         }
 
         public void Cancel()

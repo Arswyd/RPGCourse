@@ -1,12 +1,18 @@
+using System.Collections;
+using System.Collections.Generic;
+using GameDevTV.Utils;
 using Newtonsoft.Json.Linq;
+using RPG.Attributes;
 using RPG.Core;
 using RPG.Movement;
 using RPG.Saving;
+using RPG.Stats;
+using Unity.VisualScripting;
 using UnityEngine;
 
 namespace RPG.Combat
 {
-    public class Fighter : MonoBehaviour, IAction, ISaveable
+    public class Fighter : MonoBehaviour, IAction, ISaveable, IModifierProvider
     {
         [SerializeField] float timeBetweenAttacks = 1.5f;
         [SerializeField] Transform rightHandTransform = null;
@@ -17,21 +23,25 @@ namespace RPG.Combat
         ActionScheduler actionScheduler;
         Animator animator;
         float timeSinceLastAttack = Mathf.Infinity;
-        Weapon currentWeapon = null;
+        LazyValue<Weapon> currentWeapon;
 
         void Awake()
         {
             mover = GetComponent<Mover>();
             actionScheduler = GetComponent<ActionScheduler>();
             animator = GetComponent<Animator>();
+            currentWeapon = new LazyValue<Weapon>(SetupDefaultWeapon);
+        }
+
+        Weapon SetupDefaultWeapon()
+        {
+            AttachWeapon(defaultWeapon);
+            return defaultWeapon;
         }
 
         void Start()
         {
-            if(currentWeapon == null) // guard againts overwriting the saving system
-            {
-                EquipWeapon(defaultWeapon);
-            }
+            currentWeapon.ForceInit();
         }
 
         void Update()
@@ -41,7 +51,7 @@ namespace RPG.Combat
             if (target == null) { return; }
             if (target.IsDead()) { return; }
 
-            if (!GetIsInRange())
+            if (!GetIsInRange(target.transform))
             {
                 mover.MoveToDestination(target.transform.position, 1f);
             }
@@ -74,13 +84,15 @@ namespace RPG.Combat
         {
             if(target == null) { return; }
 
-            if(currentWeapon.HasProjectile())
+            float calculatedDamage = GetComponent<BaseStats>().GetStat(Stat.Damage);
+
+            if(currentWeapon.value.HasProjectile())
             {
-                currentWeapon.LaunchProjectile(rightHandTransform, leftHandTransform, target);
+                currentWeapon.value.LaunchProjectile(rightHandTransform, leftHandTransform, target, gameObject, calculatedDamage);
             }
             else
             {
-                target.TakeDamage(currentWeapon.GetDamage());
+                target.TakeDamage(gameObject, calculatedDamage);
             }
         }
 
@@ -90,9 +102,9 @@ namespace RPG.Combat
             Hit();
         }
 
-        bool GetIsInRange()
+        bool GetIsInRange(Transform targetTrasform)
         {
-            return Vector3.Distance(transform.position, target.transform.position) < currentWeapon.GetRange();
+            return Vector3.Distance(transform.position, targetTrasform.position) < currentWeapon.value.GetRange();
         }
 
         public void Attack(GameObject combatTarget)
@@ -113,23 +125,46 @@ namespace RPG.Combat
             animator.SetTrigger("stopAttack");
         }
 
+        public IEnumerable<float> GetAdditiveModifiers(Stat stat)
+        {
+            if(stat == Stat.Damage)
+            {
+                yield return currentWeapon.value.GetDamage();
+            }
+        }
+
+        public IEnumerable<float> GetPercentageModifiers(Stat stat)
+        {
+            if(stat == Stat.Damage)
+            {
+                yield return currentWeapon.value.GetPercentageBonus();
+            }
+        }
+
         public bool CanAttack(GameObject combatTarget)
         {
             if(combatTarget == null) { return false; }
+            if(!mover.CanMoveTo(combatTarget.transform.position) && !GetIsInRange(combatTarget.transform)) { return false; }
+
             Health targetToTest = combatTarget.GetComponent<Health>();
             return targetToTest != null && !targetToTest.IsDead();
         }
 
         public void EquipWeapon(Weapon weapon)
         {
-            currentWeapon = weapon;
+            currentWeapon.value = weapon;
+            AttachWeapon(weapon);
+        }
+
+        private void AttachWeapon(Weapon weapon)
+        {
             Animator animator = GetComponent<Animator>();
             weapon.Spawn(rightHandTransform, leftHandTransform, animator);
         }
 
         public JToken CaptureAsJToken()
         {
-            return JToken.FromObject(currentWeapon.name);
+            return JToken.FromObject(currentWeapon.value.name);
         }
 
         public void RestoreFromJToken(JToken state)

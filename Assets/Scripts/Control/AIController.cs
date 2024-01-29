@@ -1,4 +1,6 @@
 using System;
+using GameDevTV.Utils;
+using RPG.Attributes;
 using RPG.Combat;
 using RPG.Core;
 using RPG.Movement;
@@ -15,14 +17,17 @@ namespace RPG.Control
         [SerializeField] float waypointDwellTime = 3f;
         [Range(0,1)]
         [SerializeField] float patrolSpeedFraction = 0.2f;
+        [SerializeField] float aggroCooldownTime = 5f;
+        [SerializeField] float alertDistance = 5f;
         Fighter fighter;
         Mover mover;
         GameObject player;
         Health health;
-        Vector3 guardPosition;
+        LazyValue<Vector3> guardPosition;
         ActionScheduler actionScheduler;
         float timeSinceLastSawPlayer = Mathf.Infinity;
         float timeSinceWaypointReached = Mathf.Infinity;
+        float timeSinceAggrevated = Mathf.Infinity;
         int currentWaypointIndex = 0;
 
         void Awake()
@@ -32,20 +37,26 @@ namespace RPG.Control
             health = GetComponent<Health>();
             actionScheduler = GetComponent<ActionScheduler>();
             player = GameObject.FindWithTag("Player");
+
+            guardPosition = new LazyValue<Vector3>(SetGuardPosition);
+        }
+
+        Vector3 SetGuardPosition()
+        {
+            return transform.position;
         }
 
         void Start()
         {
-            guardPosition = transform.position;
+            guardPosition.ForceInit();
         }
 
         void Update()
         {
             if (health.IsDead()) { return; }
 
-            if (InAttackRangeOfPlayer() && fighter.CanAttack(player))
+            if (IsAggrevated() && fighter.CanAttack(player))
             {
-                timeSinceLastSawPlayer = 0;
                 AttackBehaviour();
             }
             else if (timeSinceLastSawPlayer < alertDuration)
@@ -60,21 +71,27 @@ namespace RPG.Control
             UpdateTimers();
         }
 
+        public void Aggrevate()
+        {
+            timeSinceAggrevated = 0;
+        }
+
         void UpdateTimers()
         {
             timeSinceLastSawPlayer += Time.deltaTime;
             timeSinceWaypointReached += Time.deltaTime;
+            timeSinceAggrevated += Time.deltaTime;
         }
 
-        bool InAttackRangeOfPlayer()
+        bool IsAggrevated()
         {
             float distanceToPlayer = Vector3.Distance(player.transform.position, transform.position);
-            return distanceToPlayer <= chaseDistance;
+            return distanceToPlayer <= chaseDistance || timeSinceAggrevated < aggroCooldownTime;
         }
 
         private void PatrolBehaviour()
         {
-            Vector3 nextPosition = guardPosition;
+            Vector3 nextPosition = guardPosition.value;
 
             if(patrolPath != null)
             {
@@ -115,7 +132,22 @@ namespace RPG.Control
 
         private void AttackBehaviour()
         {
+            timeSinceLastSawPlayer = 0;
             fighter.Attack(player);
+
+            AggrevateNearbyEnemies();
+        }
+
+        void AggrevateNearbyEnemies()
+        {
+            RaycastHit[] hits = Physics.SphereCastAll(transform.position, alertDistance, Vector3.up, 0);
+            foreach(RaycastHit hit in hits)
+            {
+                AIController ai = hit.collider.GetComponent<AIController>();
+                if(ai == null) { continue; }
+
+                ai.Aggrevate();
+            }
         }
 
         // Called by Unity

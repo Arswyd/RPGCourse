@@ -47,7 +47,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   projectileSpeed: 20
-  isHoming: 0
+  isHoming: 1
   hitVFX: {fileID: 194062, guid: 8c27aeead6d968e4ba986702d6b84335, type: 3}
   maxLifeTime: 10
   lifeAfterImpact: 0.5
